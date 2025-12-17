@@ -14,7 +14,7 @@ editor: source
 cat("\014"); rm(list = ls())
 
 # Define the list of packages
-packages <- c("vegan","ggnewscale","multcompView","patchwork","janitor","lubridate","stringr","tidyverse","dplyr","ggplot2","readxl","writexl","readr")
+packages <- c("DHARMa", "brms", "emmeans", "lme4","lmerTest","vegan","ggnewscale","multcompView","patchwork","janitor","lubridate","stringr","tidyverse","dplyr","ggplot2","readxl","writexl","readr")
 
 # Load packages if not already installed
 quiet_load <- function(pkg) {
@@ -41,6 +41,31 @@ df_Feeding_raw <- readxl::read_excel(exc_file_dir, sheet = "Feeding")
 
 # make into long format
 ```{r, fig.width=10, fig.height=6, dpi=100}
+# filter round 9 long last of round 8.
+df_NCE_raw <- df_NCE_raw %>%
+  dplyr::filter(round != 9) %>%
+  dplyr::select(-location_T180, -behaviour_T180)
+
+# summaries of the test animals
+grps <- list(c("treatment","light"), "treatment", "light", character(0))
+tags <- c("treatment+light","treatment","light","overall")
+
+summary_animals <- Map(function(g, tag)
+  df_NCE_raw %>%
+    group_by(across(all_of(g))) %>%
+    summarise(n_trials = n(), mean_size = mean(size_mm1, na.rm=TRUE), sd_size = sd(size_mm1, na.rm=TRUE), min_size  = min(size_mm1, na.rm = TRUE), max_size = max(size_mm1, na.rm = TRUE), mean_weight = mean(weight_g1, na.rm=TRUE), sd_weight = sd(weight_g1,       na.rm=TRUE),min_weight = min(weight_g1, na.rm = TRUE),
+      max_weight = max(weight_g1, na.rm = TRUE),.groups="drop") %>%
+    mutate(grouping=tag) %>%
+    { if(!"treatment"%in%g) mutate(., treatment="All") else . } %>%
+    { if(!"light"%in%g)     mutate(., light="All")     else . },
+  grps, tags) %>%
+  bind_rows() %>%
+  select(grouping, treatment, light, everything()) %>%
+  arrange(factor(grouping, levels=tags), treatment, light)
+
+summary_animals
+
+
 # make into long format
 koura_long <- df_NCE_raw %>%
   pivot_longer(
@@ -56,59 +81,51 @@ koura_long <- koura_long %>%
     time >= 240 ~ "after",
     TRUE ~ NA_character_))
 
-# calculate the proportions of location and behavior for each treatment
-prop_location_by_treatment <- koura_long %>%
-  filter(!is.na(location), location != "", round != 9) %>%
-  count(treatment, location = location, name = "n") %>%
-  group_by(treatment) %>%
-  mutate(prop = n / sum(n)) %>%
-  ungroup()
+#Group all refuge used to one refuge except next to refuge as that's still in the open
+koura_long_ref <- koura_long %>%
+  mutate(
+    location = case_when(
+      location == "barrier" ~ "barrier",
+      location %in% c("floor", "wall") ~ "open",
+      location %in% c("ref_back", "ref_open", "ref_next") ~ "refuge",
+      TRUE ~ NA_character_),
+    location = factor(location, levels = c("barrier", "open", "refuge")))
 
-prop_behaviour_by_treatment <- koura_long %>%
-  filter(!is.na(behaviour), behaviour != "", round != 9) %>%
-  count(treatment, behaviour = behaviour, name = "n") %>%
-  group_by(treatment) %>%
-  mutate(prop = n / sum(n)) %>%
-  ungroup()
-
-# Plots 
-p_loc <- ggplot(prop_location_by_treatment, aes(location, prop, colour = treatment)) +
-  geom_point() +
-  labs(x = "location", y = "proportion")
-
-p_beh <- ggplot(prop_behaviour_by_treatment, aes(behaviour, prop, colour = treatment)) +
-  geom_point() +
-  labs(x = "behaviour", y = "proportion")
-
-p_loc / p_beh
+koura_long_ref <- koura_long_ref %>%
+  mutate(period = case_when(
+    time < 60 ~ "before",
+    time >= 60 & time < 240 ~ "during",
+    time >= 240 ~ "after",
+    TRUE ~ NA_character_))%>%
+  mutate(period = factor(period, levels = c("before", "during", "after")))
 
 ```
 # beh & loc per treatment
 ```{r, fig.width=12, fig.height=6, dpi=100}
-
 loc_order <- c("ref_back","ref_open","ref_next","wall","floor","barrier")
-beh_order <- c("swim","static","walk","climb")
+loc_order_ref <- c("refuge","open","barrier")
+beh_order <- c("static","walk","swim","climb")
 
 # calculate the proportions of location and behavior for each treatment for each time step
-prop_location_time <- koura_long %>%
-  filter(!is.na(location), location != "", round != 9) %>%
+prop_location_time <- koura_long_ref %>%
+  filter(!is.na(location), location != "") %>%
   count(treatment, time, light, location = location, name = "n") %>%
   group_by(treatment, time, light) %>%
   mutate(prop = n / sum(n)) %>%
   ungroup() %>%
   mutate(
-    treatment = factor(treatment, levels = c("control","eel","catfish")),
-    location  = factor(location,  levels = loc_order))
+    treatment = factor(treatment, levels = c("catfish","eel","control")),
+    location  = factor(location,  levels = loc_order_ref))
 
 # Behaviour
-prop_behaviour_time <- koura_long %>%
-  filter(!is.na(behaviour), behaviour != "", round != 9) %>%
+prop_behaviour_time <- koura_long_ref %>%
+  filter(!is.na(behaviour), behaviour != "") %>%
   count(treatment, time, light, behaviour = behaviour, name = "n") %>%
   group_by(treatment, time, light) %>%
   mutate(prop = n / sum(n)) %>%
   ungroup() %>%
   mutate(
-    treatment = factor(treatment, levels = c("control","eel","catfish")),
+    treatment = factor(treatment, levels = c("catfish","eel","control")),
     behaviour = factor(behaviour, levels = beh_order))
 
 
@@ -129,26 +146,96 @@ p_beh_time <- ggplot(prop_behaviour_time, aes(time, prop, colour = behaviour, gr
 # Combine vertically
 p_loc_time / p_beh_time
 
+
+
+p_loc_time2 <- ggplot(prop_location_time, aes(time, prop, colour = treatment, group = treatment)) +
+  geom_line(linewidth = 1.5) +
+  geom_vline(xintercept = c(60, 240), linetype = "dashed") +
+  facet_grid(light ~ location, scales = "free_x") +
+  labs(x = NULL, y = "proportion", colour = "treatment")+
+  scale_y_continuous(limits = c(0, 1))
+
+p_loc_time2 
+
+```
+# Refuge proportions
+```{r fig.width=12, fig.height=5, dpi=100}
+
+df_refuge <- prop_location_time %>%
+  dplyr::filter(location == "refuge")%>%
+  mutate(timef = as.factor(time),light = as.factor(light),
+         treatment = as.factor(treatment))
+
+df_refuge_light <- prop_location_time %>%
+  dplyr::filter(location == "refuge", light == "light")%>%
+  mutate(timef = as.factor(time),light = as.factor(light),
+         treatment = as.factor(treatment))
+
+df_refuge_dark <- prop_location_time %>%
+  dplyr::filter(location == "refuge", light == "dark")%>%
+  mutate(timef = as.factor(time),
+         light = as.factor(light),
+         treatment = as.factor(treatment))
+
+df_refuge %>%
+  ggplot(aes(time, prop, group = treatment, col = treatment)) +
+  geom_line(linewidth = 1.5) +
+  geom_vline(xintercept = c(60, 240), linetype = "dashed")+
+  facet_grid( ~ light, scales = "free_x") +
+  labs(x = "time (min)", y = "proportion") 
+
+anova_3way <- aov(prop ~ treatment * light * timef, data = df_refuge)
+summary(anova_3way)
+
+anova_light <- aov(prop ~ treatment * timef, data= df_refuge_light)
+summary(anova_light)
+
+anova_dark <- aov(prop ~ treatment * timef, data= df_refuge_dark)
+summary(anova_dark)
+
+
+
+
+
+# repeated measure
+prop_period_ind <- koura_long_ref %>%
+  filter(!is.na(location), location != "") %>%
+  count(exp_id, treatment, light, period, location, name = "n") %>%
+  group_by(exp_id, treatment, light, period) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup()
+
+refuge_period <- prop_period_ind %>%
+  filter(location == "refuge")
+
+m_period <- lmer(prop ~ treatment * light * period + (1 | exp_id),  data = refuge_period)
+
+anova(m_period)
+summary(m_period)
+emmeans(m_period, ~ treatment * light * period)
+
+
 ```
 
+# BARPLOT proportions
 ```{r fig.width=12, fig.height=8, dpi=100}
 # --- Location proportions ---
-prop_location_period <- koura_long %>%
-  filter(!is.na(location), location != "", round != 9) %>%
+prop_location_period <- koura_long_ref %>%
+  filter(!is.na(location), location != "") %>%
   group_by(koura_id, treatment, light, period, location) %>%
   summarise(n = n(), .groups = "drop") %>%
   group_by(koura_id, treatment, light, period) %>%
-  complete(location = loc_order, fill = list(n = 0)) %>%
+  complete(location = loc_order_ref, fill = list(n = 0)) %>%
   mutate(prop = n / sum(n)) %>%
   ungroup() %>%
   mutate(
-    treatment = factor(treatment, levels = c("control","eel","catfish")),
-    location  = factor(location,  levels = loc_order),
+    treatment = factor(treatment, levels = c("catfish","eel","control")),
+    location  = factor(location,  levels = loc_order_ref),
     period    = factor(period,    levels = c("before","during","after")))
 
 # --- Behavior proportions ---
-prop_behaviour_period <- koura_long %>%
-  filter(!is.na(behaviour), behaviour != "", round != 9) %>%
+prop_behaviour_period <- koura_long_ref %>%
+  filter(!is.na(behaviour), behaviour != "") %>%
   group_by(koura_id, treatment, light, period, behaviour) %>%
   summarise(n = n(), .groups = "drop") %>%
   group_by(koura_id, treatment, light, period) %>%
@@ -156,43 +243,139 @@ prop_behaviour_period <- koura_long %>%
   mutate(prop = n / sum(n)) %>%
   ungroup() %>%
   mutate(
-    treatment = factor(treatment, levels = c("control","eel","catfish")),
+    treatment = factor(treatment, levels = c("catfish","eel","control")),
     behaviour = factor(behaviour, levels = beh_order),
     period    = factor(period,    levels = c("before","during","after")))
 
-# box plots
-p_loc_box <- ggplot(prop_location_period,
-                    aes(x = period, y = prop, fill = location)) +
-  geom_boxplot(position = position_dodge2(width = 0.8, preserve = "single")) +
-  facet_grid(light ~ treatment) +
-  labs(x = NULL, y = "proportion", fill = "location") 
+# BOX PLOTS
+light_lvls <- levels(factor(prop_location_period$light))
+make_all_row <- function(df) bind_rows(
+  df %>% mutate(light2 = light),
+  df %>% mutate(light2 = "All")
+) %>% mutate(light2 = factor(light2, levels = c("All", light_lvls)))
 
-p_beh_box <- ggplot(prop_behaviour_period,
-                    aes(x = period, y = prop, fill = behaviour)) +
+prop_loc_all <- make_all_row(prop_location_period)
+prop_beh_all <- make_all_row(prop_behaviour_period)
+
+p_loc_box <- ggplot(prop_loc_all, aes(x = period, y = prop, fill = location)) +
   geom_boxplot(position = position_dodge2(width = 0.8, preserve = "single")) +
-  facet_grid(light ~ treatment) +
-  labs(x = "period", y = "proportion", fill = "behaviour") 
+  facet_grid(light2 ~ treatment) +
+  labs(x = NULL, y = "proportion", fill = "location")
+
+p_beh_box <- ggplot(prop_beh_all, aes(x = period, y = prop, fill = behaviour)) +
+  geom_boxplot(position = position_dodge2(width = 0.8, preserve = "single")) +
+  facet_grid(light2 ~ treatment) +
+  labs(x = "period", y = "proportion", fill = "behaviour")
 
 p_loc_box / p_beh_box
 
+
+
+# BAR PLOTS
+sum_location_period_all <- bind_rows(
+  prop_location_period %>%
+    group_by(treatment, light, period, location) %>%
+    summarise(mean_prop = mean(prop), se_prop = sd(prop)/sqrt(n()), .groups="drop"),
+  prop_location_period %>%
+    group_by(treatment, period, location) %>%
+    summarise(mean_prop = mean(prop), se_prop = sd(prop)/sqrt(n()), .groups="drop") %>%
+    mutate(light = "All")
+) %>% mutate(light = factor(light, levels = c("All", light_lvls)))
+
+sum_behaviour_period_all <- bind_rows(
+  prop_behaviour_period %>%
+    group_by(treatment, light, period, behaviour) %>%
+    summarise(mean_prop = mean(prop), se_prop = sd(prop)/sqrt(n()), .groups="drop"),
+  prop_behaviour_period %>%
+    group_by(treatment, period, behaviour) %>%
+    summarise(mean_prop = mean(prop), se_prop = sd(prop)/sqrt(n()), .groups="drop") %>%
+    mutate(light = "All")
+) %>% mutate(light = factor(light, levels = c("All", light_lvls)))
+
+p_loc_bar <- ggplot(sum_location_period_all,
+                    aes(x = period, y = mean_prop, fill = location)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = mean_prop - se_prop, ymax = mean_prop + se_prop),
+                width = 0.3, position = position_dodge(width = 0.8)) +
+  facet_grid(light ~ treatment) +
+  labs(x = NULL, y = "mean proportion ± SE", fill = "location")
+
+p_beh_bar <- ggplot(sum_behaviour_period_all,
+                    aes(x = period, y = mean_prop, fill = behaviour)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = mean_prop - se_prop, ymax = mean_prop + se_prop),
+                width = 0.3, position = position_dodge(width = 0.8)) +
+  facet_grid(light ~ treatment) +
+  labs(x = "period", y = "mean proportion ± SE", fill = "behaviour")
+
+p_loc_bar / p_beh_bar
+
+
+
+
 ```
-# Statistics
+
+
+# Statistics addapted from Finbarr
 ```{r}
-# ---- Locations ----
-# reshape to wide so each location is a column
-loc_matrix <- prop_location_period %>%
-  tidyr::pivot_wider(names_from = location, values_from = prop, values_fill = 0)
+koura_stat <- koura_long_ref %>%
+  select(treatment, exp_id, round, tank, time, period, light, location) 
 
-# PERMANOVA using Euclidean distances
-adonis2(loc_matrix[loc_order] ~ treatment * light * period,
-        data = loc_matrix, method = "euclidean", permutations = 9999)
 
-# ---- Behaviours ----
-beh_matrix <- prop_behaviour_period %>%
-  tidyr::pivot_wider(names_from = behaviour, values_from = prop, values_fill = 0)
+# set factor ordering
+koura_stat$location <- factor(koura_stat$location, levels = c("refuge","open","barrier"))
+koura_stat$period <- factor(koura_stat$period, levels = c("before", "during", "after"))
+koura_stat$tank <- factor(koura_stat$tank)
 
-adonis2(beh_matrix[beh_order] ~ treatment * light * period,
-        data = beh_matrix, method = "euclidean", permutations = 9999)
+# scale time so the model behaves better numerically
+koura_stat$time_sc <- scale(koura_stat$time, center = TRUE, scale = TRUE)
+
+
+# test the 3 groups with 2 glmm models
+
+# 1) refuge vs rest
+df1 <- koura_stat %>%
+  mutate(loc_bin = as.integer(location == "refuge"))
+
+m_refuge <- glmer(
+  loc_bin ~ treatment * light * period + time_sc + (1 | tank),
+  data = df1, family = binomial,
+  control = glmerControl(
+    optimizer = "bobyqa",
+    optCtrl = list(maxfun = 2e5)))
+
+# 2) barrier vs open (exclude refuge)
+df2 <- koura_stat %>%
+  filter(location %in% c("open","barrier")) %>%
+  mutate(loc_bin = as.integer(location == "barrier"))
+
+m_barrier <- glmer(
+  loc_bin ~ treatment * light * period + time_sc + (1 | tank),
+  data = df2, family = binomial)
+
+summary(m_refuge)
+summary(m_barrier)
+
+
+sim <- simulateResiduals(m_refuge)
+plot(sim)
+testDispersion(sim)
+testZeroInflation(sim)
+
+
+
+# make plot
+library(ggeffects)
+pred <- ggeffect(m_refuge, terms = c("period", "treatment", "light"), bias_correction = T)
+
+# plot
+ggplot(pred, aes(x = x, y = predicted, col = group, group = group)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.5) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.15, colour = NA) +
+  facet_wrap(~ facet, labeller = label_both) +
+  scale_x_discrete("Time") +
+  scale_y_continuous("Probability of hiding in refugia", limits = c(0, 1)) 
 
 
 ```
@@ -202,25 +385,25 @@ adonis2(beh_matrix[beh_order] ~ treatment * light * period,
 ```{r, fig.width=12, fig.height=50, dpi=100}
 # --- Data prep ---
 koura_location_time <- koura_long %>%
-  filter(!is.na(location), location != "", round != 9) %>%
   mutate(location = factor(location, levels = loc_order))
 
 koura_behaviour_time <- koura_long %>%
-  filter(!is.na(behaviour), behaviour != "", round != 9) %>%
   mutate(behaviour = factor(behaviour, levels = beh_order))
 
 # --- Plots ---
-p_loc_time <- ggplot(koura_location_time, aes(time, location, col = treatment)) +
-  geom_point() +
+p_loc_time <- ggplot(koura_long_ref, aes(time, location, col = treatment)) +
+  geom_point() +  
+  geom_line(aes(group = treatment))+
   geom_vline(xintercept = c(60, 240), linetype = "dashed") +
-  facet_grid(koura_id~. , scales = "free_x") +
+  facet_grid(exp_id~.) +
   labs(x = "time (min)", y = "location") +
   theme(legend.position = "none")
 
-p_beh_time <- ggplot(koura_behaviour_time, aes(time, behaviour, col = treatment)) +
-  geom_point(size = 1.5, alpha = 0.8) +
+p_beh_time <- ggplot(koura_long_ref, aes(time, behaviour, col = treatment)) +
+  geom_point() +
+  geom_line(aes(group = treatment))+
   geom_vline(xintercept = c(60, 240), linetype = "dashed") +
-  facet_grid(koura_id~. , scales = "free_x") +
+  facet_grid(exp_id~.) +
   labs(x = "time (min)", y = "behaviour") 
 
 # --- Combine ---
@@ -230,4 +413,50 @@ p_loc_time + p_beh_time
 
 
 
+
+# Feeding experiment
+```{r}
+df_Feeding_raw
+
+df_feeding <- df_Feeding_raw %>%
+  filter(round != 1) %>%
+  mutate(pellets_eaten_24h = total_fed - left_after_24h,
+    pellets_per_g = pellets_eaten_24h / weight_g1,
+    koura_id = as.factor(koura_id),
+    treatment = as.factor(treatment),
+    day_starve = as.factor(day_starve))
+
+df_feeding <- df_feeding %>%
+  mutate(pellets_log = log(pellets_per_g + 1))
+
+mean(df_feeding$pellets_per_g)
+
+summary(df_feeding)
+
+# anova 2way
+anova_2way <- aov(pellets_per_g ~ treatment * day_starve, data = df_feeding)
+summary(anova_2way)
+
+# Linear model
+lm_raw <- lm(pellets_per_g ~ treatment * day_starve, data = df_feeding)
+lm_log <- lm(pellets_log ~ treatment * day_starve, data = df_feeding)
+
+summary(lm_raw)
+anova(lm_raw)
+summary(lm_log)
+anova(lm_log)
+
+plot(lm_raw)
+shapiro.test(residuals(lm_raw))
+
+plot(lm_log)
+shapiro.test(residuals(lm_log))
+
+ggplot(df_feeding, aes(day_starve, pellets_per_g, colour=treatment)) +
+  stat_summary(fun="mean", geom="point") +
+  stat_summary(fun="mean", geom="line", aes(group=treatment))
+
+
+
+```
 

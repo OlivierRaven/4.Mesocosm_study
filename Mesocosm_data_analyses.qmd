@@ -2,53 +2,59 @@
 title:  "Mesocosm_data_analyses"
 author: "Olivier V. Raven"
 format: html
-editor: visual
+editor: source
 ---
 
 ## Explanation of this script
 
 (brief notes here if you want; left empty to keep as-is)
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(fig.width = 8, fig.height = 10, echo = TRUE, message = FALSE, warning = FALSE)
-```
+# Load packages
 
 ```{r load packages}
+cat("\014"); rm(list = ls())
+
 # Define the list of packages
 packages <- c("multcompView","patchwork","janitor","lubridate","stringr","tidyverse","dplyr","ggplot2","readxl","writexl","readr")
 
 # Load packages if not already installed
-lapply(packages, function(pkg) {
-  if (!requireNamespace(pkg, quietly = TRUE))
-    install.packages(pkg, dependencies = TRUE)
-  library(pkg, character.only = TRUE)})
+quiet_load <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    suppressWarnings(suppressMessages(install.packages(pkg, dependencies = TRUE)))}
+  suppressPackageStartupMessages(require(pkg, character.only = TRUE, quietly = TRUE))
+  invisible(TRUE)}
 
-# keep knitting root at the document location
-knitr::opts_knit$set(root.dir = getwd())
+invisible(lapply(packages, quiet_load))
 ```
 
+# Load raw data
 
-```{r}
-project_root <- normalizePath("..", winslash = "/", mustWork = FALSE)
-excel_path   <- file.path(project_root, "data", "raw", "Mesocosm_experiment.xlsx")
-out_dir      <- file.path(project_root, "data", "processed")
-if (!file.exists(excel_path)) stop("Excel not found at: ", excel_path)
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+```{r Load raw data}
+getwd()
+exc_file_dir    <- "data/raw/Mesocosm_experiment.xlsx"
+raw_data_dir    <- "data/raw"
+der_data_dir    <- "data/derived"
+fig_dir         <- "figures"
 
-# Read sheets
-df_koura    <- readxl::read_excel(excel_path, sheet = "Koura")
-df_setup    <- readxl::read_excel(excel_path, sheet = "Tank_setup")
-df_exp1_raw <- readxl::read_excel(excel_path, sheet = "Exp1")
-df_exp2_raw <- readxl::read_excel(excel_path, sheet = "Exp2")
-df_exp3_raw <- readxl::read_excel(excel_path, sheet = "Exp3")
-df_wq       <- readxl::read_excel(excel_path, sheet = "WQ")
-df_loggers  <- readxl::read_excel(excel_path, sheet = "Loggers")
+# Read data
+df_koura        <- readxl::read_excel(exc_file_dir, sheet = "Koura")
+df_setup        <- readxl::read_excel(exc_file_dir, sheet = "Tank_setup")
+df_single_raw   <- readxl::read_excel(exc_file_dir, sheet = "Reef_single")
+df_group_raw    <- readxl::read_excel(exc_file_dir, sheet = "Reef_group")
+df_rockwood_raw <- readxl::read_excel(exc_file_dir, sheet = "Rock_wood")
+df_brick_raw    <- readxl::read_excel(exc_file_dir, sheet = "Bricks")
+df_wq           <- readxl::read_excel(exc_file_dir, sheet = "WQ")
+df_loggers      <- readxl::read_excel(exc_file_dir, sheet = "Loggers")
 ```
+
+# plot the setup
 
 ```{r loc_counts_plot, fig.width=14, fig.height=3, dpi=100}
 # make reef and location order
 REEF_LEVELS <- c("Single","Flat","Pile","Wood","Wall")
+REEF_LEVELS3 <- c("Rock","Wood","Wall")
 LOC_LEVELS <- c("A", "B", "C", "D", "E")
+LOC_LEVELS3 <- c("A", "B", "E")
 
 # build one DF with a panel column: "Combined" and each tank
 setup_counts_combined <- df_setup %>%
@@ -79,20 +85,21 @@ loc_counts_all <- ggplot(loc_reef_panels, aes(location, reef_type, fill = n)) +
   labs(x = "Location", y = "Reef type", fill = "Count")
 
 loc_counts_all
-save_plot(loc_counts_all, "Figures/loc_counts_all.png", 14, 3, dpi = 300)
+ggsave(loc_counts_all, file = file.path(fig_dir, "loc_counts_all.png"), width = 14, height = 3, dpi = 300)
 
 
 ```
 
+# plot the length weight of all koura.
 ```{r koura_s_w, fig.width=8, fig.height=6, dpi=100}
 koura_s_w <- ggplot(df_koura, aes(size_mm1, weight_g1 ))+
   geom_smooth(col="black")+
   geom_point(aes(shape = sex, col=size_class),size=3)+
-  geom_vline(xintercept = c(22, 30), linetype = "dashed") +
+  geom_vline(xintercept = c(22, 31), linetype = "dashed") +
   labs(x = "Size (mm)", y = "Weight (g)")
 
 koura_s_w
-save_plot(koura_s_w, "Figures/koura_s_ws.png", 8, 6, dpi = 300)
+ggsave(koura_s_w, file = file.path(fig_dir, "koura_s_ws.png"), width = 8, height = 6, dpi = 300)
 
 # Plot moulting events
 SIZE_LEVELS <- c("S","M","L")
@@ -113,12 +120,10 @@ ggplot(df_koura_long, aes(size, weight)) +
 
 ```
 
-```{r make into long format}
-koura_exp1 <- df_koura %>% filter(experiment == 1) %>% select(-experiment, -round)
-koura_exp2 <- df_koura %>% filter(experiment == 2) %>% select(-experiment, -round)
-
-exp1_long <- df_exp1_raw %>%
-  left_join(koura_exp1, by = "koura_id") %>%
+# Make into long format
+```{r }
+# Make the single DF into long EXP1
+df_single_long <- df_single_raw %>%
   mutate(location_l0 = l0, location_l1 = l1) %>%
   pivot_longer(
     cols = matches("_(l0|l1)$"),
@@ -131,10 +136,10 @@ exp1_long <- df_exp1_raw %>%
   select(tank, round, group_id, koura_id, size_class, sex, size_mm1, weight_g1, date,
          stage, t_leave_s, t_l0_s, location_code, reef_type,
          legs1, claws1, antenna1, size_mm2, weight_g2, legs2, claws2, antenna2,
-         notes.x, notes.y)
+         notes_exp, notes_koura)
 
-exp2_long <- df_exp2_raw %>%
-  left_join(koura_exp2, by = "koura_id") %>%
+# Make the group DF into long EXP2
+df_group_long <- df_group_raw %>%
   mutate(location_l0 = l0, location_l1 = l1) %>%
   pivot_longer(
     cols = c(location_l0, location_l1,
@@ -157,7 +162,42 @@ exp2_long <- df_exp2_raw %>%
     size_mm_stage, weight_g_stage,
     size_mm1, weight_g1, legs1, claws1, antenna1,
     size_mm2, weight_g2, legs2, claws2, antenna2,
-    notes.x, notes.y)
+    notes_exp, notes_koura)
+
+# Make the rock/wood DF into long EXP3
+df_rockwood_long <- df_rockwood_raw %>%
+  mutate(location_l0 = l0, location_l1 = l1) %>%
+  pivot_longer(cols = c(location_l0, location_l1,reef_l0, reef_l1),
+    names_to = c(".value", "stage"),
+    names_pattern = "^(.*)_(l[01])$") %>%
+  mutate(
+    stage = toupper(stage),                       
+    location_code = factor(toupper(location), levels = c("A","B","E")),
+    reef_type     = factor(reef,      levels = c("Rock","Wood","Wall"))) %>%
+  select(
+    tank, round, group_id, koura_id, size_class, sex, date,
+    stage, location_code, reef_type,
+    size_mm1, weight_g1, legs1, claws1, antenna1,
+    size_mm2, weight_g2, legs2, claws2, antenna2,
+    notes_exp, notes_koura)
+
+# Make the brick DF into long EXP4
+df_brick_long <- df_brick_raw %>%
+  mutate(location_l1 = l1) %>%
+  pivot_longer(
+    cols = c(location_l1, reef_l1),
+    names_to = c(".value", "stage"),
+    names_pattern = "^(.*)_(l[01])$") %>%
+  mutate(
+    stage = toupper(stage),                       
+    location_code = factor(toupper(location), levels = c("A","B", "C", "D","E")),
+    reef_type     = factor(reef,      levels = c("Rock","Wood","Wall"))) %>%
+  select(
+    tank, round, group_id, koura_id, size_class, sex, date,
+    stage, location_code, reef_type,
+    size_mm1, weight_g1, legs1, claws1, antenna1,
+    size_mm2, weight_g2, legs2, claws2, antenna2,
+    notes_exp, notes_koura)
 
 ```
 
@@ -189,15 +229,14 @@ letters_by_group <- function(df, group_cols, cat_col, count_col, total_col) {
       tibble(!!cat_col := names(L), .label = unname(L))
     }) %>% ungroup()
 }
-relevel_reef <- function(df) df %>% mutate(reef_type = factor(as.character(reef_type),levels = REEF_LEVELS))
-
+relevel_reef  <- function(df) df %>% mutate(reef_type = factor(as.character(reef_type),levels = REEF_LEVELS))
+relevel_reef3 <- function(df) df %>% mutate(reef_type = factor(as.character(reef_type),levels = REEF_LEVELS3))
 ```
 
-# EXPERIMENT 1 
-
+# Single koura
 ```{r Exp1_reef_p, fig.width=8, fig.height=6, dpi=100}
 # ---- Combined + by-sex in one DF (no prints) ----
-exp1_reef_combined <- exp1_long %>%
+exp1_reef_combined <- df_single_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, name = "n") %>%
   group_by(stage) %>%
@@ -206,7 +245,7 @@ exp1_reef_combined <- exp1_long %>%
   relevel_reef() %>%
   mutate(panel = "Combined")
 
-exp1_reef_bysex <- exp1_long %>%
+exp1_reef_bysex <- df_single_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, sex, name = "n") %>%
   group_by(stage, sex) %>%
@@ -229,7 +268,7 @@ exp1_reef_all_L <- letters_by_group(
 lab_stage <- c(L0 = "Initial location (L0)", L1 = "Next-day location (L1)")
 lab_panel <- c(Combined = "Combined", Female = "Female", Male = "Male")
 
-# ---- One plot: rows = Combined/Female/Male; cols = stage ----
+# One plot
 p_exp1_reef_all <- exp1_reef_all %>%
   left_join(exp1_reef_all_L, by = c("stage","panel","reef_type")) %>%
   relevel_reef() %>%
@@ -240,7 +279,7 @@ p_exp1_reef_all <- exp1_reef_all %>%
   labs(x = "Reef type", y = "Proportion")
 
 p_exp1_reef_all
-ggsave("Figures/Exp1_reef_p.png", p_exp1_reef_all, width = 8, height = 6, dpi = 300)
+ggsave(p_exp1_reef_all, file = file.path(fig_dir, "Exp1_reef_p.png"), width = 8, height = 6, dpi = 300)
 
 ```
 
@@ -272,10 +311,10 @@ invisible(capture.output({
   }
 
   # data
-  exp1_loc    <- mk_props(exp1_long, location_code, tank)
-  exp1_round  <- mk_props(exp1_long, location_code, round)
-  exp1_loc2   <- mk_props(exp1_long, reef_type,     tank)
-  exp1_round2 <- mk_props(exp1_long, reef_type,     round)
+  exp1_loc    <- mk_props(df_single_long, location_code, tank)
+  exp1_round  <- mk_props(df_single_long, location_code, round)
+  exp1_loc2   <- mk_props(df_single_long, reef_type,     tank)
+  exp1_round2 <- mk_props(df_single_long, reef_type,     round)
 
   # plots
   p_exp1_loc    <- mk_bar(exp1_loc,   location_code, tank,  "Location proportions by tank")
@@ -291,7 +330,7 @@ loc_round_plots_exp1
 ```
 
 ```{r act_exp1_p, fig.width=6, fig.height=4, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
-exp1_pairs <- exp1_long %>%
+exp1_pairs <- df_single_long %>%
   dplyr::filter(stage %in% c("L0","L1")) %>%
   dplyr::select(koura_id, tank, round, size_class, sex, stage,location_code, reef_type, t_leave_s, t_l0_s) %>%
   dplyr::mutate(
@@ -322,24 +361,23 @@ act_exp1_p
 
 ```
 
-# EXPERIMENT 2
-
+# Group koura
 ```{r p_exp2_reef_all, fig.width=8, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
-exp2_reef <- exp2_long %>%
-  filter(stage %in% c("L0","L1")) %>%
+exp2_reef <- df_group_long %>%
+  filter(stage %in% c("l0","l1")) %>%
   count(stage, reef_type, name = "n") %>%
   group_by(stage) %>%
   mutate(N = sum(n), prop = n / N) %>%
   ungroup() %>% relevel_reef()
 
-exp2_reef_size <- exp2_long %>%
+exp2_reef_size <- df_group_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, size_class, name = "n") %>%
   group_by(stage, size_class) %>%
   mutate(N = sum(n), prop = n / N) %>%
   ungroup() %>% relevel_reef()
 
-exp2_reef_koura <- exp2_long %>%
+exp2_reef_koura <- df_group_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, koura_id, name = "n") %>%
   group_by(stage, koura_id) %>%
@@ -388,7 +426,7 @@ p_exp2_reef_all <- exp2_all %>%
   labs(x = "Reef type", y = "Proportion")
 
 p_exp2_reef_all
-ggsave("Figures/Exp2_reef_p.png", p_exp2_reef_all, width = 8, height = 8, dpi = 300)
+ggsave(p_exp2_reef_all, file = file.path(fig_dir, "Exp2_reef_p.png"), width = 8, height = 8, dpi = 300)
 
 ```
 
@@ -402,6 +440,28 @@ p_exp2_reef_koura <- exp2_reef_koura %>%
   facet_wrap(koura_id ~ stage, nrow = 6) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 p_exp2_reef_koura
+
+
+exp2_use <- df_group_long %>% 
+  filter(stage %in% c("L0","L1"))
+
+counts <- exp2_use %>%
+  filter(!is.na(reef_type), !is.na(size_class)) %>%
+  mutate(
+    tank = factor(tank),
+    round = factor(round),
+    stage = factor(stage, levels = c("L0","L1")),
+    reef_type  = fct_relevel(reef_type,"Single","Flat","Pile","Wood","Wall"),
+    size_class = factor(size_class)) %>%
+  count(stage, round, tank, reef_type, size_class, name = "number_koura") %>%
+  complete(stage, round, tank, reef_type, size_class, fill = list(number_koura = 0))
+
+p_stack <- ggplot(counts, aes(reef_type, number_koura, fill = size_class)) +
+  geom_col() +
+  facet_grid(round ~ tank+stage  , scales = "free_x")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_stack
 
 ```
 
@@ -434,10 +494,10 @@ invisible(capture.output({
   }
 
   # data
-  exp2_loc    <- mk_props(exp2_long, location_code, tank)
-  exp2_round  <- mk_props(exp2_long, location_code, round)
-  exp2_loc2   <- mk_props(exp2_long, reef_type,     tank)
-  exp2_round2 <- mk_props(exp2_long, reef_type,     round)
+  exp2_loc    <- mk_props(df_group_long, location_code, tank)
+  exp2_round  <- mk_props(df_group_long, location_code, round)
+  exp2_loc2   <- mk_props(df_group_long, reef_type,     tank)
+  exp2_round2 <- mk_props(df_group_long, reef_type,     round)
 
   # plots
   p_exp2_loc    <- mk_bar(exp2_loc,   location_code, tank,  "Location proportions by tank")
@@ -452,6 +512,314 @@ loc_round_plots_exp2
 
 ```
 
+# Wood/rock
+```{r fig.width=8, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+exp3_reef <- df_rockwood_long %>%
+  filter(stage %in% c("L0","L1"), !is.na(reef_type)) %>%
+  count(stage, reef_type, name = "n") %>%
+  group_by(stage) %>%
+  mutate(N = sum(n), prop = n / N) %>%
+  ungroup() %>% relevel_reef3()
+
+exp3_reef_size <- df_rockwood_long %>%
+  filter(stage %in% c("L0","L1"), !is.na(reef_type)) %>%
+  count(stage, reef_type, size_class, name = "n") %>%
+  group_by(stage, size_class) %>%
+  mutate(N = sum(n), prop = n / N) %>%
+  ungroup() %>% relevel_reef3()
+
+exp3_reef_koura <- df_rockwood_long %>%
+  filter(stage %in% c("L0","L1"), !is.na(reef_type)) %>%
+  count(stage, reef_type, koura_id, name = "n") %>%
+  group_by(stage, koura_id) %>%
+  mutate(N = sum(n), prop = n / N) %>%
+  mutate(reef_type = factor(reef_type,levels = c("Rock","Wood","Wall")))%>%
+  ungroup() %>% relevel_reef3()
+
+# Letters
+exp3_reef_L   <- letters_by_group(exp3_reef,group_cols = c("stage"),cat_col = "reef_type",count_col = "n",total_col = "N")
+exp3_size_L   <- letters_by_group(exp3_reef_size,group_cols = c("stage","size_class"),cat_col = "reef_type",count_col = "n",total_col = "N")
+exp3_koura_L  <- letters_by_group(exp3_reef_koura,group_cols = c("stage","koura_id"),cat_col = "reef_type",count_col = "n", total_col = "N")
+
+# Panel labels and order
+lab_stage   <- c(L0 = "Initial location (L0)", L1 = "Next-day location (L1)")
+PANEL_LEVELS <- c("Combined","S","M","L")
+lab_panel    <- c(Combined = "Combined", S = "Small", M = "Medium", L = "Large")
+
+# Build combined counts
+exp3_top <- exp3_reef %>%
+  mutate(panel = factor("Combined", levels = PANEL_LEVELS))
+
+exp3_bot <- exp3_reef_size %>%
+  mutate(panel = factor(as.character(size_class), levels = PANEL_LEVELS))
+
+exp3_all <- bind_rows(exp3_top, exp3_bot)
+
+# Build combined letters (use the LETTER tibbles only; avoid prop/others)
+exp3_top_L <- exp3_reef_L %>%
+  mutate(panel = factor("Combined", levels = PANEL_LEVELS)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp3_bot_L <- exp3_size_L %>%
+  mutate(panel = factor(as.character(size_class), levels = PANEL_LEVELS)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp3_all_L <- dplyr::bind_rows(exp3_top_L, exp3_bot_L)
+
+# One plot with a left strip for every row (Combined, S, M, L)
+p_exp3_reef_all <- exp3_all %>%
+  dplyr::left_join(exp3_all_L, by = c("stage","reef_type","panel")) %>% relevel_reef3() %>% 
+  ggplot(aes(reef_type, prop)) +
+  geom_col(color = "black") +
+  geom_text(aes(y = prop + 0.1, label = .label)) +
+  facet_grid(panel ~ stage, labeller = labeller(stage = lab_stage, panel = lab_panel)) +
+  labs(x = "Reef type", y = "Proportion")
+
+p_exp3_reef_all
+ggsave(p_exp3_reef_all, file = file.path(fig_dir, "Exp3_reef_p.png"), width = 8, height = 8, dpi = 300)
+
+```
+
+```{r exp3_loc_round_plots, fig.width=12, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+invisible(capture.output({
+
+  # proportions by x var and facet var (per stage)
+  mk_props <- function(data, xvar, facetvar) {
+    data %>%
+      dplyr::filter(stage %in% c("L0","L1")) %>%
+      dplyr::count(stage, {{ xvar }}, {{ facetvar }}, name = "n") %>%
+      dplyr::group_by(stage, {{ facetvar }}) %>%
+      dplyr::mutate(N = sum(n), prop = n / N) %>%
+      dplyr::ungroup()
+  }
+
+  # bar plot; uses facet_grid for rows=facetvar, cols=stage
+  mk_bar <- function(df, xvar, facetvar, title, reef = FALSE) {
+    p <- ggplot(df, aes({{ xvar }}, prop)) +
+      geom_col(color = "black") +
+      facet_grid(rows = vars({{ facetvar }}), cols = vars(stage)) +
+      labs(title = title)+
+      scale_y_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0.05)))
+    if (reef) {
+      p <- p +
+        scale_x_discrete(limits = REEF_LEVELS3, drop = FALSE) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    }
+    p
+  }
+
+  # data
+  exp3_loc    <- mk_props(df_rockwood_long, location_code, tank)
+  exp3_round  <- mk_props(df_rockwood_long, location_code, round)
+  exp3_loc3   <- mk_props(df_rockwood_long, reef_type,     tank)
+  exp3_round3 <- mk_props(df_rockwood_long, reef_type,     round)
+
+  # plots
+  p_exp3_loc    <- mk_bar(exp3_loc,   location_code, tank,  "Location proportions by tank")
+  p_exp3_round  <- mk_bar(exp3_round, location_code, round, "Location proportions by round")
+  p_exp3_loc3   <- mk_bar(exp3_loc3,  reef_type,     tank,  "Reeftype by tank",  reef = TRUE)
+  p_exp3_round3 <- mk_bar(exp3_round3,reef_type,     round, "Reeftype by round", reef = TRUE)
+
+  loc_round_plots_exp3 <<- p_exp3_loc + p_exp3_loc3 + p_exp3_round + p_exp3_round3 +
+    patchwork::plot_layout(ncol = 4)
+}))
+loc_round_plots_exp3
+```
+
+# Bricks
+```{r fig.width=8, fig.height=6, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+Bricks_koura_sum <- df_brick_raw %>%
+  #group_by(koura_id) %>%
+  mutate(min_length = min(size_mm1),
+         mean_length = mean(size_mm1),
+         max_length = max(size_mm1),
+         min_weight = min(weight_g1),
+         mean_weight = mean(weight_g1),
+         max_weight = max(weight_g1))
+
+# Combined (no sex/size split)
+exp4_reef <- df_brick_long %>%
+  dplyr::filter(stage %in% c("L1"), !is.na(reef_type)) %>%
+  dplyr::count(stage, reef_type, name = "n") %>%
+  dplyr::group_by(stage) %>%
+  dplyr::mutate(N = sum(n), prop = n / N) %>%
+  dplyr::ungroup() %>%
+  relevel_reef3()
+
+# By SEX
+exp4_reef_sex <- df_brick_long %>%
+  dplyr::filter(stage %in% c("L1")) %>%
+  dplyr::count(stage, reef_type, sex, name = "n") %>%
+  dplyr::group_by(stage, sex) %>%
+  dplyr::mutate(N = sum(n), prop = n / N) %>%
+  dplyr::ungroup() %>%
+  relevel_reef3() %>%
+  dplyr::mutate(panel = dplyr::recode(sex, F = "Female", M = "Male"))
+
+# By SIZE
+exp4_reef_size <- df_brick_long %>%
+  dplyr::filter(stage %in% c("L1")) %>%
+  dplyr::count(stage, reef_type, size_class, name = "n") %>%
+  dplyr::group_by(stage, size_class) %>%
+  dplyr::mutate(N = sum(n), prop = n / N) %>%
+  dplyr::ungroup() %>%
+  relevel_reef3()
+
+# By individual koura 
+exp4_reef_koura <- df_rockwood_long %>%
+  dplyr::filter(stage %in% c("L1"), !is.na(reef_type)) %>%
+  dplyr::count(stage, reef_type, koura_id, name = "n") %>%
+  dplyr::group_by(stage, koura_id) %>%
+  dplyr::mutate(N = sum(n), prop = n / N) %>%
+  dplyr::ungroup() %>%
+  relevel_reef3()
+
+# Letters
+exp4_reef_L   <- letters_by_group(exp4_reef,group_cols = c("stage"),cat_col = "reef_type", count_col= "n", total_col = "N")
+exp4_sex_L    <- letters_by_group(exp4_reef_sex,group_cols = c("stage","sex"),cat_col = "reef_type", count_col = "n", total_col = "N")
+exp4_size_L   <- letters_by_group(exp4_reef_size,group_cols = c("stage","size_class"),cat_col = "reef_type", count_col = "n", total_col  = "N")
+exp4_koura_L  <- letters_by_group(exp4_reef_koura,group_cols = c("stage","koura_id"), cat_col = "reef_type",count_col  = "n", total_col  = "N")
+
+# Labels (facets)
+lab_stage     <- c(L1 = "Next-day location (L1)")
+PANEL_LEVELS  <- c("Combined","M","F")
+lab_panel     <- c(Combined = "Combined", M = "Male", F = "Female")
+
+PANEL_LEVELS2 <- c("Combined","S","M","L")
+lab_panel2    <- c(Combined = "Combined", S = "Small", M = "Medium", L = "Large")
+
+# ---- SEX sample sizes ----
+sex_n <- exp4_reef_sex %>%
+  group_by(sex) %>%
+  summarise(n_total = sum(n), .groups = "drop")
+
+# Build named vector for labeller
+lab_panel_n_sex <- setNames(paste0(c("Combined", sex_n$sex),c(" (combined)",paste0(" (n=", sex_n$n_total, ")"))),c("Combined", sex_n$sex))
+
+# Rename F/M to Female/Male with n
+lab_panel_n_sex <- c( Combined = "Combined",
+                      M = paste0("Male (n=", sex_n$n_total[sex_n$sex == "M"], ")"),
+                      F = paste0("Female (n=", sex_n$n_total[sex_n$sex == "F"], ")"))
+
+# ---- SIZE sample sizes ----
+size_n <- exp4_reef_size %>%
+  group_by(size_class) %>%
+  summarise(n_total = sum(n), .groups = "drop")
+
+lab_panel_n_size <- c(  Combined = "Combined",
+                        S = paste0("Small (n=",  size_n$n_total[size_n$size_class == "S"], ")"),
+                        M = paste0("Medium (n=", size_n$n_total[size_n$size_class == "M"], ")"),
+                        L = paste0("Large (n=",  size_n$n_total[size_n$size_class == "L"], ")"))
+
+# ---------- SEX analysis (standalone) ----------
+
+# Build combined counts
+exp4_sex_top <- exp4_reef %>%
+  dplyr::mutate(panel = factor("Combined", levels = PANEL_LEVELS))
+
+exp4_sex_bot <- exp4_reef_sex %>%
+  dplyr::mutate(panel = factor(as.character(sex), levels = PANEL_LEVELS))
+
+exp4_sex_all <- dplyr::bind_rows(exp4_sex_top, exp4_sex_bot)
+
+# Build combined letters
+exp4_sex_top_L <- exp4_reef_L %>%
+  dplyr::mutate(panel = factor("Combined", levels = PANEL_LEVELS)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp4_sex_bot_L <- exp4_sex_L %>%
+  dplyr::mutate(panel = factor(as.character(sex), levels = PANEL_LEVELS)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp4_sex_all_L <- dplyr::bind_rows(exp4_sex_top_L, exp4_sex_bot_L)
+
+# Plot
+p_exp4_sex <- exp4_sex_all %>%
+  left_join(exp4_sex_all_L, by = c("stage","reef_type","panel")) %>%
+  relevel_reef3() %>%
+  ggplot(aes(reef_type, prop)) +
+  geom_col(color = "black") +
+  geom_text(aes(y = prop + 0.05, label = .label)) +
+  facet_grid(panel ~ stage,
+             labeller = labeller(
+               stage = lab_stage,
+               panel = lab_panel_n_sex    # use new labeller with n
+             )) +
+  labs(x = "Reef type", y = "Proportion")
+
+p_exp4_sex
+
+#ggplot2::ggsave(filename = file.path(fig_dir, "Exp4_sex_p.png"),plot = p_exp4_sex,width = 8, height = 8, dpi = 300)
+
+# ---------- SIZE analysis (standalone) ----------
+
+# Build combined counts
+exp4_size_top <- exp4_reef %>%
+  dplyr::mutate(panel = factor("Combined", levels = PANEL_LEVELS2))
+
+exp4_size_bot <- exp4_reef_size %>%
+  dplyr::mutate(panel = factor(as.character(size_class), levels = PANEL_LEVELS2))
+
+exp4_size_all <- dplyr::bind_rows(exp4_size_top, exp4_size_bot)
+
+# Build combined letters
+exp4_size_top_L <- exp4_reef_L %>%
+  dplyr::mutate(panel = factor("Combined", levels = PANEL_LEVELS2)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp4_size_bot_L <- exp4_size_L %>%
+  dplyr::mutate(panel = factor(as.character(size_class), levels = PANEL_LEVELS2)) %>%
+  dplyr::select(stage, reef_type, panel, .label)
+
+exp4_size_all_L <- dplyr::bind_rows(exp4_size_top_L, exp4_size_bot_L)
+
+# Plot
+p_exp4_size <- exp4_size_all %>%
+  left_join(exp4_size_all_L, by = c("stage","reef_type","panel")) %>%
+  relevel_reef3() %>%
+  ggplot(aes(reef_type, prop)) +
+  geom_col(color = "black") +
+  geom_text(aes(y = prop + 0.07, label = .label)) +
+  facet_grid(panel ~ stage,
+             labeller = labeller(
+               stage = lab_stage,
+               panel = lab_panel_n_size   # use new labeller with n
+             )) +
+  labs(x = "Reef type", y = "Proportion")
+
+p_exp4_size
+
+#ggplot2::ggsave(filename = file.path(fig_dir, "Exp4_size_p.png"), plot = p_exp4_size, width = 8, height = 8, dpi = 300)
+
+p_exp4combined <- p_exp4_sex + p_exp4_size 
+p_exp4combined
+ggplot2::ggsave(filename = file.path(fig_dir, "Exp4_size_sex_p.png"), plot = p_exp4combined, width = 8, height = 8, dpi = 300)
+
+```
+
+```{r}
+df_brick_long %>%
+  group_by(group_id, size_class, sex, reef_type) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(group_id, size_class)
+
+df_brick_long %>%
+  ggplot(aes(x = factor(group_id), fill = size_class)) +
+  geom_bar(position = "fill") +  # use "stack" to show raw counts
+  labs(x = "Group ID", y = "Proportion", fill = "Size class") +
+  theme_bw()
+
+df_brick_long %>%
+  ggplot(aes(x = factor(group_id), fill = interaction(sex, size_class))) +
+  geom_bar(position = "fill") +
+  labs(x = "Group ID", y = "Proportion", fill = "Sex × Size class") +
+  theme_bw()
+
+```
+
+
+
+# WQ
 ```{r wq_all_plot, fig.width=10, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
 # --- Probe data (df_wq) ---
 wq_clean <- df_wq %>%
@@ -463,13 +831,8 @@ wq_probe <- wq_clean %>%
 
 # --- Logger data (df_loggers) -> give unique param_label names ---
 wq_logger <- df_loggers %>%
-  rename(
-    datetime    = `Date-Time (NZST)`,
-    temperature = `Temperature , °C`,
-    light       = `Light , lux`,
-    tank        = Tank) %>%
-  mutate(
-    tank     = factor(tank),
+  rename(datetime = data_time) %>%
+  mutate(tank     = factor(tank),
     datetime = lubridate::ymd_hms(datetime, tz = "Pacific/Auckland")) %>%
   pivot_longer(c(temperature, light), names_to = "param", values_to = "value") %>%
   mutate(
@@ -502,7 +865,6 @@ wq_all_plot <- ggplot(wq_all, aes(datetime, value, color = tank, group = tank)) 
   facet_wrap(~ param_label, scales = "free_y", ncol = 2)
 
 wq_all_plot
-ggsave("Figures/wq_all_probe_logger.png", wq_all_plot, width = 10, height = 8, dpi = 300)
+ggsave(wq_all_plot, file = file.path(fig_dir, "wq_all_probe_logger.png"), width = 10, height = 8, dpi = 300)
 
 ```
-
