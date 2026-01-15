@@ -160,18 +160,16 @@ write.csv(prop_refuge, file = file.path(fig_dir, "prop_refuge.csv"), row.names =
 ```
 
 
-# Statistics GLMM addapted from Finbarr
+# Statistics GLMM addapted from Finn
 ```{r}
 koura_stat <- koura_long_ref %>%
   select(treatment, exp_id, round, tank, time, period, light, location) 
-
 
 # set factor ordering
 koura_stat$location <- factor(koura_stat$location, levels = c("refuge","open"))
 koura_stat$period <- factor(koura_stat$period, levels = c("before", "during", "after"))
 koura_stat$tank <- factor(koura_stat$tank)
 koura_stat$time_sc <- scale(koura_stat$time, center = TRUE, scale = TRUE)
-
 
 # test theglmm model
 m_refuge <- glmer(location ~ treatment * light * period + time_sc + (1 | tank),
@@ -180,7 +178,6 @@ m_refuge <- glmer(location ~ treatment * light * period + time_sc + (1 | tank),
   control     = glmerControl(
     optimizer = "bobyqa",
     optCtrl   = list(maxfun = 2e5)))
-
 
 sum_ref<-summary(m_refuge)
 sum_ref
