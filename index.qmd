@@ -1,22 +1,33 @@
 ---
-title:  "Mesocosm_data_analyses"
+title: "Reefs Mesocosm"
 author: "Olivier V. Raven"
-format: html
-editor: source
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+execute:
+  freeze: auto
+  warning: false
+  message: false
 ---
 
-## Explanation of this script
+## Overview
+This site accompanies the scientific work on: *Reefs Mesocosm*.
 
-(brief notes here if you want; left empty to keep as-is)
+- **Code repository:** (add URL)
+- **Data DOI:** (add DOI link)
+- **Paper DOI:** (add DOI link)
+- **Title:** Reefs Mesocosm
 
-# Load packages
+## Setup
 ```{r}
-cat("\014"); rm(list = ls())
-
-# Define the list of packages
+#| label: setup
 packages <- c("XNomial","brms","nnet","lme4","multcompView","patchwork","janitor","lubridate","stringr","tidyverse","dplyr","ggplot2","readxl","writexl","readr")
 
-# Load packages if not already installed
+
 quiet_load <- function(pkg) {
   if (!requireNamespace(pkg, quietly = TRUE)) {
     suppressWarnings(suppressMessages(install.packages(pkg, dependencies = TRUE)))}
@@ -24,18 +35,26 @@ quiet_load <- function(pkg) {
   invisible(TRUE)}
 
 invisible(lapply(packages, quiet_load))
+
+base_theme_bw <- theme_classic() +
+  theme(text     = element_text(family = "Arial", size = 11),
+    axis.title   = element_text(face = "plain"),
+    axis.text    = element_text(face = "plain"),
+    plot.title   = element_text(face = "plain"),
+    strip.text   = element_text(face = "plain"),
+    panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.3))
+theme_set(base_theme_bw)
 ```
 
 # Load raw data
 ```{r}
-# Set paths
-getwd()
+#| label: load-data
 exc_file_dir    <- "data/raw/Mesocosm_experiment.xlsx"
 raw_data_dir    <- "data/raw"
-der_data_dir    <- "data/processed"
+der_data_dir    <- "data/derived"
 fig_dir         <- "figures"
 
-# Helper functions
+
 read_sheet <- function(sheet) {readxl::read_excel(exc_file_dir, sheet = sheet)}
 write_out <- function(df, name) {write.csv(df, file.path(der_data_dir, name), row.names = FALSE)}
 
