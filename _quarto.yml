@@ -1,0 +1,20 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Reefs Rotoiti"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+
+format:
+  html:
+    toc: true
+    number-sections: true
+
+execute:
+  freeze: auto
+  warning: false
+  message: false

@@ -1,32 +1,22 @@
 ---
-title: "Reefs mesocosm study"
+title:  "Mesocosm_data_analyses"
 author: "Olivier V. Raven"
-format:
-  html:
-    toc: true
-    number-sections: true
-    code-fold: true
-    code-summary: "Show code"
-    code-tools: true
-execute:
-  freeze: auto
-  warning: false
-  message: false
+format: html
+editor: source
 ---
 
-## Overview
-This site accompanies the scientific work on: *Reefs Rotoiti*.
+## Explanation of this script
 
-- **Code repository:** (add URL)
-- **Data DOI:** (add DOI link)
-- **Paper DOI:** (add DOI link)
-- **Title:** Reefs Rotoiti
+(brief notes here if you want; left empty to keep as-is)
 
-## Setup
+# Load packages
 ```{r}
+cat("\014"); rm(list = ls())
+
+# Define the list of packages
 packages <- c("XNomial","brms","nnet","lme4","multcompView","patchwork","janitor","lubridate","stringr","tidyverse","dplyr","ggplot2","readxl","writexl","readr")
 
-
+# Load packages if not already installed
 quiet_load <- function(pkg) {
   if (!requireNamespace(pkg, quietly = TRUE)) {
     suppressWarnings(suppressMessages(install.packages(pkg, dependencies = TRUE)))}
@@ -42,7 +32,7 @@ invisible(lapply(packages, quiet_load))
 getwd()
 exc_file_dir    <- "data/raw/Mesocosm_experiment.xlsx"
 raw_data_dir    <- "data/raw"
-der_data_dir    <- "data/derived"
+der_data_dir    <- "data/processed"
 fig_dir         <- "figures"
 
 # Helper functions
