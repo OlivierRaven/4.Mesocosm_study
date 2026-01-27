@@ -3,7 +3,7 @@ project:
   output-dir: docs
 
 website:
-  title: "Reefs Rotoiti"
+  title: "Reefs Mesocosm"
   navbar:
     left:
       - href: index.qmd

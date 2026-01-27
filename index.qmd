@@ -68,7 +68,7 @@ df_brick_raw      <- read_sheet("Bricks")
 df_wq             <- read_sheet("WQ")
 df_loggers        <- read_sheet("Loggers")
 
-# set prefered orders
+# set preferred orders
 REEF_LEVELS  <- c("SingleStone","FlatStone","StonePile","WoodLog","TankWall")
 REEF_LEVELS3 <- c("FlatStone","WoodSplit","TankWall")
 REEF_LEVELS4 <- c("Brick_Artificial","Brick_Wood","TankWall")
@@ -82,6 +82,12 @@ relevel_reef4 <- function(df) df %>% mutate(reef_type = factor(as.character(reef
 
 # Length-Weight of koura
 ```{r}
+#| label: Length-Weight of koura
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 summarise_size_weight <- function(df) {
   df %>%
     summarise(
@@ -104,8 +110,9 @@ summarise_size_weight(df_brick_raw)
 ```
 
 # Make DF's into long format
-```{r }
-# EXP 1 – Single reefs (long)
+```{r}
+#| label: Long format
+
 df_single_long <- df_single_raw %>%
   mutate(location_l0 = l0, location_l1 = l1) %>%
   pivot_longer(cols = matches("_(l0|l1)$"),
@@ -161,9 +168,14 @@ df_brick_long <- df_brick_raw %>%
 write_out(df_brick_long, "df_brick_long.csv")
 ```
 
-# Single koura
-```{r Exp1_reef_p, fig.width=8, fig.height=6, dpi=100}
-# ---- Combined + by-sex in one DF (no prints) ----
+# Exp 1 Single koura
+```{r}
+#| label: Exp 1
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp1_reef_combined <- df_single_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, name = "n") %>%
@@ -201,8 +213,14 @@ ggsave(p_exp1_reef_all, file = file.path(fig_dir, "Exp1_reef_p.png"), width = 8,
 
 ```
 
-# Single koura II
-```{r exp1_loc_round_plots, fig.width=12, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 1 II
+```{r}
+#| label: Exp 1 II
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 invisible(capture.output({
   # proportions by x var and facet var (per stage)
   mk_props <- function(data, xvar, facetvar) {
@@ -248,8 +266,14 @@ loc_round_plots_exp1
 
 ```
 
-# Single koura III
-```{r act_exp1_p, fig.width=6, fig.height=4, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 1 III
+```{r}
+#| label: Exp 1 III
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp1_pairs <- df_single_long %>%
   dplyr::filter(stage %in% c("L0","L1")) %>%
   dplyr::select(koura_id, tank, round, size_class, sex, stage,location_code, reef_type, t_leave_s, t_l0_s) %>%
@@ -281,9 +305,54 @@ act_exp1_p
 
 ```
 
-# Group koura
-```{r p_exp2_reef_all, fig.width=8, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
-# Combined (across all kōura)
+## Exp 1 Statistic
+```{r}
+#| label: Statistics Exp 1
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
+df1 <- df_single_long %>%
+  mutate(
+    reef_type      = factor(reef_type),
+    stage          = factor(stage, levels = c("L0", "L1")),
+    sex            = factor(sex),
+    size_class     = factor(size_class),
+    location_code  = factor(location_code),
+    tank           = factor(tank),
+    round          = factor(round),
+    koura_id       = factor(koura_id),
+    size_mm1       = as.numeric(size_mm1),
+    weight_g1      = as.numeric(weight_g1)) %>%
+  filter(!is.na(reef_type))
+
+# most preferred reef at L1
+df1_L1 <- df1 %>% filter(stage == "L1")
+
+tab_L1 <- table(df1_L1$reef_type)
+tab_L1_nz <- tab_L1[tab_L1 > 0]        
+XNomial::xmulti(obs  = as.numeric(tab_L1_nz), expr = rep(sum(tab_L1_nz) / length(tab_L1_nz), length(tab_L1_nz)))
+
+
+
+# Test between L0 and L1
+m_exp1 <- nnet::multinom(reef_type ~ stage + sex + size_mm1, data = df1)
+m_exp1. <- nnet::multinom(reef_type ~ sex + size_mm1, data = df1)
+summary(m_exp1)
+summary(m_exp1.)
+confint(m_exp1)
+anova(m_exp1, m_exp1., test = "Chisq")
+```
+
+# Exp 2 Group koura
+```{r}
+#| label: Exp 2
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp2_reef_combined <- df_group_long %>%
   filter(stage %in% c("L0","L1")) %>%
   count(stage, reef_type, name = "n") %>%
@@ -323,8 +392,14 @@ p_exp2_reef_all
 ggsave(p_exp2_reef_all, file = file.path(fig_dir, "Exp2_reef_p.png"), width = 8, height = 8, dpi = 300)
 ```
 
-# Group koura II
-```{r exp2_loc_round_plots, fig.width=12, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 2 II
+```{r}
+#| label: Exp 2 II
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 invisible(capture.output({
 
   # proportions by x var and facet var (per stage)
@@ -371,9 +446,14 @@ loc_round_plots_exp2
 
 ```
 
-# Group koura III
-```{r p_exp2_reef_koura, fig.width=12, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
-# Ensure stage casing matches what exp2_koura_L expects
+## Exp 2 III
+```{r}
+#| label: Exp 2 III
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp2_reef_koura <- df_group_long %>%
   mutate(stage = toupper(stage)) %>%
   filter(stage %in% c("L0","L1")) %>%
@@ -415,8 +495,42 @@ p_stack <- ggplot(counts, aes(reef_type, number_koura, fill = size_class)) +
 p_stack
 ```
 
-# Wood/stone
-```{r fig.width=8, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 2 Statistic
+```{r}
+#| label: Statistics Exp 2
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
+df2 <- df_group_long %>%
+  mutate(
+    reef_type      = factor(reef_type),
+    stage          = factor(stage, levels = c("L0", "L1")),
+    sex            = factor(sex),
+    size_class     = factor(size_class, levels = c("S", "M", "L")),
+    location_code  = factor(location_code),
+    tank           = factor(tank),
+    round          = factor(round),
+    group_id       = factor(group_id),
+    koura_id       = factor(koura_id)) %>%
+  filter(!is.na(reef_type))
+
+form_exp2 <- reef_type ~ stage + size_class + (1 | group_id) + (1 | tank) + (1 | round)
+
+#m_exp2 <- brm(formula = form_exp2, data = df2, family = categorical(link = "logit"), chains= 4, cores = 4,  iter = 4000, seed = 1)
+
+#summary(m_exp2)
+```
+
+# Exp 3 Wood/stone
+```{r}
+#| label: Exp 3
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp3_reef <- df_stonewood_long %>%
   filter(stage %in% c("L0","L1"), !is.na(reef_type)) %>%
   count(stage, reef_type, name = "n") %>%
@@ -460,8 +574,14 @@ ggsave(p_exp3_reef_all, file = file.path(fig_dir, "Exp3_reef_p.png"), width = 8,
 
 ```
 
-# Wood/stone II
-```{r exp3_loc_round_plots, fig.width=12, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 3 II
+```{r}
+#| label: Exp 3 II
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 invisible(capture.output({
   # proportions by x var and facet var (per stage)
   mk_props <- function(data, xvar, facetvar) {
@@ -505,8 +625,49 @@ loc_round_plots_exp3 <<- p_exp3_loc + p_exp3_loc3 + p_exp3_round + p_exp3_round3
 loc_round_plots_exp3
 ```
 
-# Bricks
-```{r fig.width=8, fig.height=6, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
+## Exp 3 Statistic
+```{r}
+#| label: Statistics Exp 3
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
+df3 <- df_stonewood_long %>%
+  mutate(
+    reef_type      = factor(reef_type),
+    stage          = factor(stage, levels = c("L0", "L1")),
+    sex            = factor(sex),
+    size_class     = factor(size_class, levels = c("S", "M", "L")),
+    location_code  = factor(location_code),
+    tank           = factor(tank),
+    round          = factor(round),
+    group_id       = factor(group_id),
+    koura_id       = factor(koura_id)
+  ) %>%
+  filter(!is.na(reef_type))
+
+## Set FlatStone as reference so coefficients are for WoodSplit vs FlatStone
+df3 <- df3 %>% mutate(reef_type = relevel(reef_type, ref = "FlatStone"))
+
+m_exp3 <- glmer(
+  reef_type ~ stage + size_class + (1 | group_id) + (1 | koura_id) + (1 | tank) + (1 | round),
+  data    = df3,
+  family  = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa")
+)
+
+summary(m_exp3)
+```
+
+# Exp 4 Bricks
+```{r}
+#| label: Exp 4 
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 exp4_reef <- df_brick_long %>%
   dplyr::filter(stage %in% c("L1"), !is.na(reef_type)) %>%
   dplyr::count(stage, reef_type, name = "n") %>%
@@ -617,8 +778,14 @@ p_exp4combined
 ggplot2::ggsave(filename = file.path(fig_dir, "Exp4_size_sex_p.png"), plot = p_exp4combined, width = 8, height = 8, dpi = 300)
 ```
 
-# Bricks II
+## Exp 4 II
 ```{r}
+#| label: Exp 4
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 df_brick_long %>%
   group_by(group_id, size_class, sex, reef_type) %>%
   summarise(n = n(), .groups = "drop") %>%
@@ -681,97 +848,14 @@ loc_round_plots_exp4
 
 ```
 
-# Statisical models
+## Exp 4 Statistic
 ```{r}
-# Single 
-df1 <- df_single_long %>%
-  mutate(
-    reef_type      = factor(reef_type),
-    stage          = factor(stage, levels = c("L0", "L1")),
-    sex            = factor(sex),
-    size_class     = factor(size_class),
-    location_code  = factor(location_code),
-    tank           = factor(tank),
-    round          = factor(round),
-    koura_id       = factor(koura_id),
-    size_mm1       = as.numeric(size_mm1),
-    weight_g1      = as.numeric(weight_g1)) %>%
-  filter(!is.na(reef_type))
+#| label: Statistics Exp 4
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
 
-# most prefered reef at L1
-df1_L1 <- df1 %>% filter(stage == "L1")
-
-tab_L1 <- table(df1_L1$reef_type)
-tab_L1_nz <- tab_L1[tab_L1 > 0]        
-XNomial::xmulti(obs  = as.numeric(tab_L1_nz), expr = rep(sum(tab_L1_nz) / length(tab_L1_nz), length(tab_L1_nz)))
-
-
-
-# Test between L0 and L1
-m_exp1 <- nnet::multinom(reef_type ~ stage + sex + size_mm1, data = df1)
-m_exp1. <- nnet::multinom(reef_type ~ sex + size_mm1, data = df1)
-summary(m_exp1)
-summary(m_exp1.)
-confint(m_exp1)
-anova(m_exp1, m_exp1., test = "Chisq")
-
-# Group ######################################
-df2 <- df_group_long %>%
-  mutate(
-    reef_type      = factor(reef_type),
-    stage          = factor(stage, levels = c("L0", "L1")),
-    sex            = factor(sex),
-    size_class     = factor(size_class, levels = c("S", "M", "L")),
-    location_code  = factor(location_code),
-    tank           = factor(tank),
-    round          = factor(round),
-    group_id       = factor(group_id),
-    koura_id       = factor(koura_id)) %>%
-  filter(!is.na(reef_type))
-
-form_exp2 <- reef_type ~ stage + size_class + (1 | group_id) + (1 | tank) + (1 | round)
-
-m_exp2 <- brm(
-  formula = form_exp2,
-  data    = df2,
-  family  = categorical(link = "logit"),
-  chains  = 4,
-  cores   = 4,
-  iter    = 4000,
-  seed    = 1)
-
-summary(m_exp2)
-
-
-
-# Wood/stone ######################### 
-df3 <- df_stonewood_long %>%
-  mutate(
-    reef_type      = factor(reef_type),
-    stage          = factor(stage, levels = c("L0", "L1")),
-    sex            = factor(sex),
-    size_class     = factor(size_class, levels = c("S", "M", "L")),
-    location_code  = factor(location_code),
-    tank           = factor(tank),
-    round          = factor(round),
-    group_id       = factor(group_id),
-    koura_id       = factor(koura_id)
-  ) %>%
-  filter(!is.na(reef_type))
-
-## Set FlatStone as reference so coefficients are for WoodSplit vs FlatStone
-df3 <- df3 %>% mutate(reef_type = relevel(reef_type, ref = "FlatStone"))
-
-m_exp3 <- glmer(
-  reef_type ~ stage + sex + size_class + (1 | group_id) + (1 | koura_id) + (1 | tank) + (1 | round),
-  data    = df3,
-  family  = binomial(link = "logit"),
-  control = glmerControl(optimizer = "bobyqa")
-)
-
-summary(m_exp3)
-
-# Bricks #########################
 df4 <- df_brick_long %>%
   mutate(
     reef_type      = factor(reef_type),
@@ -789,7 +873,7 @@ df4 <- df_brick_long %>%
 df4 <- df4 %>% mutate(reef_type = relevel(reef_type, ref = "Brick_Artificial"))
 
 m_exp4 <- glmer(
-  reef_type ~ stage + location_code + sex + size_class + (1 | group_id) + (1 | koura_id) + (1 | tank) + (1 | round),
+  reef_type ~ location_code + sex + size_class + (1 | group_id) + (1 | koura_id) + (1 | tank) + (1 | round),
   data    = df4,
   family  = binomial(link = "logit"),
   control = glmerControl(optimizer = "bobyqa"))
@@ -799,8 +883,13 @@ summary(m_exp4)
 ```
 
 # WQ
-```{r wq_all_plot, fig.width=10, fig.height=8, dpi=100, echo=FALSE, message=FALSE, warning=FALSE}
-# --- Probe data (df_wq) ---
+```{r}
+#| label: WQ
+#| fig-width: 6
+#| fig-height: 7
+#| dpi: 120
+#| fig-cap: "."
+
 wq_clean <- df_wq %>%
   mutate(value = suppressWarnings(as.numeric(value)),tank  = factor(tank),param_label = ifelse(is.na(unit) | unit %in% c("", "NA"), parameter_abb, paste(parameter_abb, unit))) %>%
   filter(!is.na(tank_use), !is.na(value),data_time >= as.POSIXct("2025-09-01"),tank_use == "Experiment")
